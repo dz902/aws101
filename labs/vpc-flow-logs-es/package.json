@@ -1,0 +1,28 @@
+{
+  "name": "vpc-flow-logs-es",
+  "version": "0.1.0",
+  "private": true,
+  "license": "private",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "synth": "tsc && cdk synth"
+  },
+  "devDependencies": {
+    "@types/node": "8.10.45",
+    "aws-cdk": "^1.1.0",
+    "ts-node": "^8.1.0",
+    "typescript": "^3.3.3333"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-elasticsearch": "^1.2.0",
+    "@aws-cdk/aws-iam": "^1.2.0",
+    "@aws-cdk/aws-kinesisfirehose": "^1.1.0",
+    "@aws-cdk/aws-lambda": "^1.1.0",
+    "@aws-cdk/aws-lambda-event-sources": "^1.1.0",
+    "@aws-cdk/aws-logs": "^1.2.0",
+    "@aws-cdk/aws-s3": "^1.1.0",
+    "@aws-cdk/core": "^1.1.0",
+    "source-map-support": "^0.5.9"
+  }
+}
