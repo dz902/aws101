@@ -41,8 +41,7 @@ export class VpcFlowLogsEsStack extends cdk.Stack {
         instanceType: 't2.small.elasticsearch',
         instanceCount: 1,
         zoneAwarenessEnabled: false
-      },
-      accessPolicies: []
+      }
     })
 
     // FIREHOSE
@@ -104,7 +103,8 @@ export class VpcFlowLogsEsStack extends cdk.Stack {
 
     queueBackupBucketRaw.applyRemovalPolicy(cdk.RemovalPolicy.DESTROY)
 
-    const queue:any = new firehose.CfnDeliveryStream(this, 'Queue', {
+    const queue:any = new firehose.CfnDeliveryStream(this, 'Queue'  , {
+      deliveryStreamName: 'vpc-flow-logs-queue',
       elasticsearchDestinationConfiguration: {
         roleArn: queueRole.roleArn,
         domainArn: flowLogsEs.attrArn,
@@ -139,7 +139,7 @@ export class VpcFlowLogsEsStack extends cdk.Stack {
       }
     })
 
-  const flowLogsAccessPolicies = {
+  const flowLogsEsAccessPolicies = {
       Version: '2012-10-17',
       Statement: [
         {
@@ -156,35 +156,61 @@ export class VpcFlowLogsEsStack extends cdk.Stack {
             'es:ESHttpGet'
           ],
           Resource: `${esArn}/*` 
+        },
+        {
+          Effect: iam.Effect.ALLOW,
+          Principal: {
+            AWS: '*'
+          },
+          Action: [
+            'es:*'
+          ],
+          Condition: {
+            IpAddress: {
+              'aws:SourceIp': [
+                '192.168.1.1/32'
+              ]
+            }
+          },
+          Resource: `${esArn}/*` 
         }
       ]
     }
 
-    flowLogsEs.accessPolicies = flowLogsAccessPolicies
+    flowLogsEs.accessPolicies = flowLogsEsAccessPolicies
 
     // FLOW LOGS BUCKET
 
     const flowLogsBucket = new s3.Bucket(this, 'Bucket', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL
     })
 
     // LAMBDA
+
+    const extractorFunctionName = 'flowLogsExtractor'
 
     const bucketObjectCreationEvent = new S3EventSource(flowLogsBucket, {
       events: [ s3.EventType.OBJECT_CREATED ]
     })
 
+    const extractorLogGroup = new logs.LogGroup(this, 'ExtractorLogGroup', {
+      logGroupName: `/aws/lambda/${extractorFunctionName}`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    })
+
     const extractorRole = new iam.Role(this, 'ExtractorRole', {
       roleName: 'flowLogsExtractorRole',
+      managedPolicies: [
+         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
       inlinePolicies: {
-        's3-get-object': new iam.PolicyDocument({
+        'firehose': new iam.PolicyDocument({
           statements: [
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
-              actions: [
-                's3:GetObject'
-              ],
-              resources: [ flowLogsBucket.bucketArn ]
+              actions: ['firehose:PutRecordBatch'],
+              resources: [queue.attrArn]
             })
           ]
         })
@@ -192,18 +218,20 @@ export class VpcFlowLogsEsStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com')
     })
 
+    flowLogsBucket.addToResourcePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['s3:GetObject*'],
+      resources: [`${flowLogsBucket.bucketArn}/*`],
+      principals: [extractorRole]
+    }))
+
     const extractor = new lambda.Function(this, 'Extractor', {
-      functionName: 'flowLogsExtractor',
+      functionName: extractorFunctionName,
       runtime: lambda.Runtime.NODEJS_10_X,
       handler: 'index.handler',
       code: lambda.Code.asset(__dirname + '/extract-s3-flow-logs'),
       role: extractorRole,
-      events: [ bucketObjectCreationEvent ]
-    })
-
-    const extractorLogGroup = new logs.LogGroup(this, 'ExtractorLogGroup', {
-      logGroupName: `/aws/lambda/${extractor.functionName}`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY
+      events: [bucketObjectCreationEvent]
     })
   }
 }
