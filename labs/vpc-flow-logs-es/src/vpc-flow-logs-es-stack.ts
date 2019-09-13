@@ -41,7 +41,8 @@ export class VpcFlowLogsEsStack extends cdk.Stack {
         instanceType: 't2.small.elasticsearch',
         instanceCount: 1,
         zoneAwarenessEnabled: false
-      }
+      },
+                            
     })
 
     // FIREHOSE
