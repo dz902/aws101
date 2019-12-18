@@ -1,10 +1,22 @@
 # VPC Flow Logs / CDK 演示
 
+将 VPC Flow Logs 存入 S3，并通过 Firehose 打入 Amazon Elasticsearch Service
+
 ## 免责声明
 
-仅供参考。本篇文章中所提供的代码仅为教学、说明之用，无意直接用于任何生产环境。代码为个人研究所写，不能确保一定可用、有效，也不能确保所有潜在的安全问题都考虑到。如有需要，敬请酌情在非重要环境及非重要数据上试用，并按照自己实际需求对代码进行进一步的调整、修改、补充。我们不对文中代码的任何层面做任何保障，也不承担因为使用代码而造成的任何后果。
- 
-潜在费用。使用这篇文章中的 CDK 代码将会部署一些服务资源，包括 Amazon S3、Amazon Elasticsearch Service、Amazon CloudWatch、AWS Lambda、Amazon Kinesis 等等。读者应该了解并接受这些服务的收费模式，并在试用完成后注意及时停用、关闭资源，删除 AWS CloudFormation （下简称CFn）中生成的 Stack，避免持续产生费用。我们无法对实际资源使用产生的费用负责。
+建议测试过程中使用此方案，生产环境使用请自行考虑评估。
+
+当您对方案需要进一步的沟通和反馈后，可以联系 nwcd_labs@nwcdcloud.cn 获得更进一步的支持。
+
+欢迎联系参与方案共建和提交方案需求, 也欢迎在 github 项目 issue 中留言反馈 bugs。
+
+## 项目说明
+
+本项目让用户可以使用 Elasticsearch 来分析 VPC Flow Logs。这个项目提供日志进入 Elasticsearch 的框架，用户可以基于日志数据进行分析和可视化。
+
+在 CloudWatch Logs Insights 未进入 AWS 大陆区域之前，此方法可以帮助用户快速分析和可视化 VPC Flow Logs，识别流量模式和潜在风险。
+
+![](images/vpc-flow-logs.png)
 
 ## 使用方式
 
@@ -25,7 +37,38 @@
 - 使用 `npm run cdk synth` 命令，转译 CDK 模板
 - 使用 `npm run cdk deploy` 命令，部署转译好的 CloudFormation 模板
 
+### 开启 Flow Logs
+
+- 在控制台搜索服务 > VPC
+- 选择想开启 Flow Logs 的 VPC 或子网
+- 创建 Flow Logs，选择 S3 桶作为目标，输入 CloudFormation 创建的桶的 ARN
+- 创建会失败，稍等 1-2 分钟后去 CloudTrails > Events History 找到 `PutBucketPolicy`，并复制其中的 `bucketPolicy` 字段（详见微信文章：链接）
+- 将复制出的粘贴到前述桶的 Bucket Policy，并修改其中的 `awscn` 为 `aws-cn`
+ - 此为绕过 Flow Logs 的一个 Bug
+- 重新创建 Flow Logs 即可成功 
+
 ### 删除资源
 
 部署成功后，可在 CloudFormation 中看到已经部署的 Stack。实验完成后，记得删除 Stack，避免持续产生费用。
 
+## FAQ
+
+**问：这个演示有什么用？**
+
+答：这个演示主要目的是展示 CDK 的完整使用流程。此外，在中国区没有 CloudWatch Logs Insights 的时候可以作为 Flow Logs 的分析和可视化基础。
+
+**问：如何确认日志是否有打入？**
+
+答：在 Elasticsearch 的 Indices 界面下，可以看到 `flow-logs-2019-01-01` 的索引，点开如果看到 `Count` 大于 1 则意味着有日志已打入。
+
+**问：开启之后为什么没有日志打入？**
+
+答：① 确保 Flow Logs 打入正确的桶，且桶中出现了 Flow Logs 的文件夹；② 确保选择的 VPC 有网络流量；③ 在开启之后稍微等片刻，日志发送会有一定的滞后（数分钟到十数分钟都有可能）。
+
+**问：为什么 Kibana 中没有看到数据？**
+
+答：为确保演示不跑偏，演示内容仅包含数据进入 Kibana，但不包含 Kibana 本身的使用。请关注后续的演示，或参考其他资料对 Kibana 进行配置。在 Elasticsearch > Indices 中可以看到日志的格式，方便配置 Kibana。用户也可以根据自己需要来调整 CDK，基于 Kibana 来做日志分析和可视化，并形成基建代码。
+
+**问：遇到问题如何调试？**
+
+答：这个演示已经考虑到了大部分调试问题并且已在中国区域进行测试，如果仍遇到问题，可在 CloudWatch 中可以看到 Lambda 和 Kinesis 的日志，也可以在 CloudTrail 中看到 API 相关的日志。
